@@ -9,6 +9,8 @@ import {
   getPipedriveLabelName
 } from '@/lib/constants';
 import { DetailedPlanningsByUser } from '@/lib/planningService';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 type DetailedPlanningProps = {
   plannings: DetailedPlanningsByUser;
@@ -50,6 +52,31 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
     }
     
     return true;
+  };
+
+  // Formatar nome do vendedor para exibição mais amigável
+  const formatVendorName = (name: string) => {
+    if (!name) return "";
+    
+    // Remove espaços extras
+    name = name.trim();
+    
+    // Separa o nome em partes
+    const nameParts = name.split(' ');
+    
+    // Capitaliza cada parte do nome
+    const formattedParts = nameParts.map(part => {
+      if (part.length === 0) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    });
+    
+    // Se o nome tiver mais de duas partes, mostra apenas o primeiro e último nome
+    if (formattedParts.length > 2) {
+      return `${formattedParts[0]} ${formattedParts[formattedParts.length - 1]}`;
+    }
+    
+    // Caso contrário, retorna o nome completo formatado
+    return formattedParts.join(' ');
   };
 
   // Filtrar os dados com base nos filtros selecionados, incluindo a data de criação
@@ -108,6 +135,91 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
       
       return true;
     });
+  };
+
+  // Preparar dados para exportação em formato tabular
+  const prepareExportData = () => {
+    const exportData: any[] = [];
+    
+    Object.entries(filteredData).forEach(([userId, userData]) => {
+      const filteredDeals = getFilteredDeals(userData.deals);
+      
+      filteredDeals.forEach(item => {
+        exportData.push({
+          'Vendedor': formatVendorName(userData.userName),
+          'Tipo': item.type === 'close' ? 'Fechamento' : 'Acompanhamento',
+          'ID': item.deal.id,
+          'Título': item.deal.title || 'Sem título',
+          'Valor': item.deal.value ? Number(item.deal.value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00',
+          'Etapa': getStageNameFromId(item.deal.stage_id),
+          'Etiquetas': getLabelNamesFromIds(item.deal.label_ids),
+          'Planejamento de': formatDate(userData.created_at),
+          'Update': item.deal.update_time ? formatDate(item.deal.update_time) : 'N/A',
+          'Resultado': getResultadoText(item.deal),
+        });
+      });
+    });
+    
+    return exportData;
+  };
+
+  // Obter texto do resultado sem componentes React
+  const getResultadoText = (deal: Deal): string => {
+    const labelIds = deal.label_ids || [];
+    
+    if (labelIds.includes(22)) {
+      return 'CANCELADO';
+    }
+    
+    if (deal.stage_id === 5) {
+      return 'FECHADO';
+    }
+    
+    const recognizedLabels = labelIds.filter((id: number) => 
+      Object.values(PIPEDRIVE_LABELS).includes(id as PipedriveLabel)
+    );
+    
+    if (recognizedLabels.length > 0) {
+      return getPipedriveLabelName(recognizedLabels[0] as PipedriveLabel) || 'Desconhecida';
+    }
+    
+    const isUpdatedToday = () => {
+      if (!deal.update_time) return false;
+      
+      const updateDate = new Date(deal.update_time);
+      const today = new Date();
+      
+      return (
+        updateDate.getDate() === today.getDate() &&
+        updateDate.getMonth() === today.getMonth() &&
+        updateDate.getFullYear() === today.getFullYear()
+      );
+    };
+    
+    return isUpdatedToday() ? 'FEITO' : 'NÃO FEITO';
+  };
+
+  // Exportar para Excel
+  const exportToExcel = () => {
+    const exportData = prepareExportData();
+    
+    if (exportData.length === 0) {
+      alert('Não há dados para exportar com os filtros atuais.');
+      return;
+    }
+    
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Planejamento Detalhado');
+    
+    // Adicionar data no nome do arquivo
+    const hoje = new Date();
+    const dataFormatada = hoje.toLocaleDateString('pt-BR').replace(/\//g, '-');
+    
+    // Converter para binário e fazer download
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(data, `Planejamento_Detalhado_${dataFormatada}.xlsx`);
   };
 
   // Verificar se etapa existe nas constantes
@@ -223,7 +335,18 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
   return (
     <div className="space-y-3">
       <div className="bg-white p-3 rounded-lg shadow">
-        <h3 className="text-base font-medium mb-3">Filtros</h3>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-base font-medium">Filtros</h3>
+          <button
+            onClick={exportToExcel}
+            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Exportar para Excel
+          </button>
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           {/* Filtro de Data */}
@@ -281,7 +404,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
               <option value="all">Todos</option>
               {userOptions.filter(u => u !== 'all').map(userName => (
                 <option key={userName} value={userName}>
-                  {plannings[userName]?.userName || userName}
+                  {formatVendorName(plannings[userName]?.userName || userName)}
                 </option>
               ))}
             </select>
@@ -365,7 +488,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
                   filteredDeals.map((item, index) => (
                     <tr key={`${userId}-${item.deal.id}-${index}`}>
                       <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
-                        {userData.userName}
+                        {formatVendorName(userData.userName)}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs">
                         <span className={`inline-flex px-1.5 py-0.5 text-xxs font-medium rounded-full ${
