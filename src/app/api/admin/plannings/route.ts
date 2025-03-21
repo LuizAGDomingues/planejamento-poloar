@@ -14,6 +14,7 @@ type PlanningData = {
   deal_ids_close: number[];
   deal_ids_followup: number[];
   user_id: string;
+  created_at: string;
 };
 
 export async function GET() {
@@ -27,6 +28,7 @@ export async function GET() {
         deal_ids_close,
         deal_ids_followup,
         partners_count,
+        created_at,
         users (
           id,
           nome
@@ -96,7 +98,8 @@ export async function GET() {
         partners_count: planning.partners_count || 0,
         deal_ids_close: planning.deal_ids_close || [],
         deal_ids_followup: planning.deal_ids_followup || [],
-        user_id: planning.user_id
+        user_id: planning.user_id,
+        created_at: planning.created_at || ''
       };
     });
 

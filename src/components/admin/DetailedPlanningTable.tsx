@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Deal } from '@/lib/pipedrive';
 import { 
   PIPEDRIVE_STAGES,
@@ -21,27 +21,60 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
   const [labelFilter, setLabelFilter] = useState<number | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'close' | 'followup'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [dateStart, setDateStart] = useState<string>('');
+  const [dateEnd, setDateEnd] = useState<string>('');
+
+  // Inicializar datas ao carregar o componente - data atual como padrão
+  useEffect(() => {
+    const today = new Date();
+    const formattedToday = today.toISOString().split('T')[0];
+    setDateStart(formattedToday);
+    setDateEnd(formattedToday);
+  }, []);
 
   // Lista de usuários para o filtro
   const userOptions = useMemo(() => {
     return ['all', ...Object.keys(plannings)];
   }, [plannings]);
 
-  // Filtrar os dados com base nos filtros selecionados
-  const filteredData = useMemo(() => {
-    const result = { ...plannings };
+  // Verificar se a data do planejamento está dentro do range selecionado
+  const isPlanningInDateRange = (created_at: string) => {
+    if (!created_at) return false;
     
-    // Se estiver filtrando por usuário específico
-    if (userFilter !== 'all') {
-      const filtered: Record<string, any> = {};
-      if (result[userFilter]) {
-        filtered[userFilter] = result[userFilter];
-      }
-      return filtered;
+    const creationDate = new Date(created_at);
+    const creationDateStr = creationDate.toISOString().split('T')[0];
+    
+    // Filtro de datas
+    if (dateStart && dateEnd) {
+      return creationDateStr >= dateStart && creationDateStr <= dateEnd;
     }
     
+    return true;
+  };
+
+  // Filtrar os dados com base nos filtros selecionados, incluindo a data de criação
+  const filteredData = useMemo(() => {
+    const result: DetailedPlanningsByUser = {};
+    
+    // Primeiro filtramos por usuário
+    const initialData = userFilter !== 'all' 
+      ? plannings[userFilter] 
+        ? { [userFilter]: plannings[userFilter] } 
+        : {}
+      : { ...plannings };
+    
+    // Depois filtramos por data de criação
+    Object.entries(initialData).forEach(([userId, userData]) => {
+      if (isPlanningInDateRange(userData.created_at)) {
+        result[userId] = {
+          ...userData,
+          deals: [...userData.deals] // Fazemos uma cópia para evitar alterações no original
+        };
+      }
+    });
+    
     return result;
-  }, [plannings, userFilter]);
+  }, [plannings, userFilter, dateStart, dateEnd]);
 
   // Filtrar deals com base nos filtros selecionados
   const getFilteredDeals = (deals: { deal: Deal, type: 'close' | 'followup' }[]) => {
@@ -94,7 +127,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
   const getLabelNamesFromIds = (labelIds?: number[]) => {
     if (!labelIds || !labelIds.length) return 'Sem etiquetas';
     
-    return labelIds
+    const labels = labelIds
       .map(id => {
         const labelValue = Object.values(PIPEDRIVE_LABELS).find(
           value => value === id
@@ -104,8 +137,9 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
           ? getPipedriveLabelName(labelValue)
           : null;
       })
-      .filter(Boolean)
-      .join(', ') || 'Etiquetas não reconhecidas';
+      .filter(Boolean);
+    
+    return labels.length > 0 ? labels.join(', ') : 'Sem etiquetas';
   };
 
   // Analisar o resultado com base nas regras
@@ -130,9 +164,13 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
       );
     }
     
-    // Se tiver etiquetas, mostrar a primeira
-    if (labelIds.length > 0) {
-      const labelName = getPipedriveLabelName(labelIds[0] as PipedriveLabel) || 'Desconhecida';
+    // Se tiver etiquetas reconhecidas, mostrar a primeira
+    const recognizedLabels = labelIds.filter((id: number) => 
+      Object.values(PIPEDRIVE_LABELS).includes(id as PipedriveLabel)
+    );
+    
+    if (recognizedLabels.length > 0) {
+      const labelName = getPipedriveLabelName(recognizedLabels[0] as PipedriveLabel) || 'Desconhecida';
       return (
         <span className="inline-flex px-1.5 py-0.5 text-xxs font-medium rounded-full bg-blue-100 text-blue-800">
           {labelName}
@@ -140,7 +178,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
       );
     }
     
-    // Se não tiver etiquetas, verificar update_time
+    // Se não tiver etiquetas reconhecidas, verificar update_time
     const isUpdatedToday = () => {
       if (!deal.update_time) return false;
       
@@ -175,12 +213,62 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
     return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
   };
 
+  // Formatar data para exibição
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR');
+  };
+
   return (
     <div className="space-y-3">
       <div className="bg-white p-3 rounded-lg shadow">
         <h3 className="text-base font-medium mb-3">Filtros</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          {/* Filtro de Data */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label htmlFor="dateStart" className="block text-xs font-medium text-gray-700 mb-1">
+                Data Inicial
+              </label>
+              <input
+                id="dateStart"
+                type="date"
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                value={dateStart}
+                onChange={(e) => setDateStart(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="dateEnd" className="block text-xs font-medium text-gray-700 mb-1">
+                Data Final
+              </label>
+              <input
+                id="dateEnd"
+                type="date"
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                value={dateEnd}
+                onChange={(e) => setDateEnd(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          {/* Filtro de Pesquisa */}
+          <div>
+            <label htmlFor="searchTerm" className="block text-xs font-medium text-gray-700 mb-1">Pesquisar</label>
+            <input
+              id="searchTerm"
+              type="text"
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Pesquisar por título ou ID"
+            />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {/* Filtro de Usuário */}
           <div>
             <label htmlFor="userFilter" className="block text-xs font-medium text-gray-700 mb-1">Vendedor</label>
@@ -249,19 +337,6 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
               <option value="followup">Acompanhamento</option>
             </select>
           </div>
-          
-          {/* Pesquisa */}
-          <div>
-            <label htmlFor="searchTerm" className="block text-xs font-medium text-gray-700 mb-1">Pesquisar</label>
-            <input
-              id="searchTerm"
-              type="text"
-              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Pesquisar por título ou ID"
-            />
-          </div>
         </div>
       </div>
       
@@ -278,6 +353,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
                 <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
                 <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etapa</th>
                 <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etiquetas</th>
+                <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Planejamento de</th>
                 <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resultado</th>
               </tr>
             </thead>
@@ -315,6 +391,9 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
                       <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
                         {getLabelNamesFromIds(item.deal.label_ids)}
                       </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-900">
+                        {formatDate(userData.created_at)}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs">
                         {getResultado(item.deal)}
                       </td>
@@ -325,8 +404,8 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
               
               {Object.keys(filteredData).length === 0 || Object.values(filteredData).every(userData => getFilteredDeals(userData.deals).length === 0) ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-2 text-center text-xs text-gray-500">
-                    Nenhum negócio encontrado com os filtros selecionados
+                  <td colSpan={9} className="px-3 py-2 text-center text-xs text-gray-500">
+                    Nenhum planejamento encontrado com os filtros selecionados
                   </td>
                 </tr>
               ) : null}

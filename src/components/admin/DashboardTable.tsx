@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 type PlanningData = {
   id: string;
@@ -11,6 +11,7 @@ type PlanningData = {
   deal_ids_close: number[];
   deal_ids_followup: number[];
   user_id: string;
+  created_at: string;
 };
 
 interface DashboardTableProps {
@@ -18,10 +19,66 @@ interface DashboardTableProps {
 }
 
 export default function DashboardTable({ planningData }: DashboardTableProps) {
+  const [dateStart, setDateStart] = useState<string>('');
+  const [dateEnd, setDateEnd] = useState<string>('');
+  const [userFilter, setUserFilter] = useState<string>('all');
+
+  // Inicializar datas ao carregar o componente - data atual como padrão
+  useEffect(() => {
+    const today = new Date();
+    const formattedToday = today.toISOString().split('T')[0];
+    setDateStart(formattedToday);
+    setDateEnd(formattedToday);
+  }, []);
+
+  // Lista única de usuários para o filtro
+  const userOptions = useMemo(() => {
+    const userMap = new Map<string, string>();
+    
+    planningData.forEach(item => {
+      userMap.set(item.user_id, item.nome);
+    });
+    
+    return [{ id: 'all', nome: 'Todos' }, ...Array.from(userMap.entries())
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome))];
+  }, [planningData]);
+
+  // Verificar se a data do planejamento está dentro do range selecionado
+  const isPlanningInDateRange = (created_at: string) => {
+    if (!created_at) return false;
+    
+    const creationDate = new Date(created_at);
+    const creationDateStr = creationDate.toISOString().split('T')[0];
+    
+    if (dateStart && dateEnd) {
+      return creationDateStr >= dateStart && creationDateStr <= dateEnd;
+    }
+    
+    return true;
+  };
+
+  // Filtrar dados por data e usuário
+  const filteredData = useMemo(() => {
+    return planningData.filter(item => {
+      // Filtro de data
+      if (!isPlanningInDateRange(item.created_at)) {
+        return false;
+      }
+      
+      // Filtro de usuário
+      if (userFilter !== 'all' && item.user_id !== userFilter) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [planningData, dateStart, dateEnd, userFilter]);
+
   // Calcula os totais
-  const totalCloseValue = planningData.reduce((total, item) => total + item.deal_value_close, 0);
-  const totalFollowupValue = planningData.reduce((total, item) => total + item.deal_value_followup, 0);
-  const totalPartnersCount = planningData.reduce((total, item) => total + item.partners_count, 0);
+  const totalCloseValue = filteredData.reduce((total, item) => total + item.deal_value_close, 0);
+  const totalFollowupValue = filteredData.reduce((total, item) => total + item.deal_value_followup, 0);
+  const totalPartnersCount = filteredData.reduce((total, item) => total + item.partners_count, 0);
 
   // Formata valores monetários
   const formatCurrency = (value: number) => {
@@ -34,6 +91,60 @@ export default function DashboardTable({ planningData }: DashboardTableProps) {
 
   return (
     <div>
+      {/* Filtros */}
+      <div className="bg-white p-3 rounded-lg shadow mb-6">
+        <h3 className="text-base font-medium mb-3">Filtros</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Filtro de Data Inicial */}
+          <div>
+            <label htmlFor="dateStart" className="block text-xs font-medium text-gray-700 mb-1">
+              Data Inicial
+            </label>
+            <input
+              id="dateStart"
+              type="date"
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              value={dateStart}
+              onChange={(e) => setDateStart(e.target.value)}
+            />
+          </div>
+          
+          {/* Filtro de Data Final */}
+          <div>
+            <label htmlFor="dateEnd" className="block text-xs font-medium text-gray-700 mb-1">
+              Data Final
+            </label>
+            <input
+              id="dateEnd"
+              type="date"
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              value={dateEnd}
+              onChange={(e) => setDateEnd(e.target.value)}
+            />
+          </div>
+          
+          {/* Filtro de Usuário */}
+          <div>
+            <label htmlFor="userFilter" className="block text-xs font-medium text-gray-700 mb-1">
+              Vendedor
+            </label>
+            <select
+              id="userFilter"
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+            >
+              {userOptions.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow">
@@ -78,7 +189,7 @@ export default function DashboardTable({ planningData }: DashboardTableProps) {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {planningData.map((planning) => (
+            {filteredData.map((planning) => (
               <tr key={planning.id}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{planning.nome}</div>
@@ -101,7 +212,7 @@ export default function DashboardTable({ planningData }: DashboardTableProps) {
               </tr>
             ))}
             
-            {planningData.length === 0 && (
+            {filteredData.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
                   Nenhum dado disponível
@@ -115,13 +226,13 @@ export default function DashboardTable({ planningData }: DashboardTableProps) {
                 Total
               </td>
               <td className="px-6 py-4 whitespace-nowrap font-bold">
-                {planningData.reduce((acc, item) => acc + item.deal_count_close, 0)}
+                {filteredData.reduce((acc, item) => acc + item.deal_count_close, 0)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap font-bold">
                 {formatCurrency(totalCloseValue)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap font-bold">
-                {planningData.reduce((acc, item) => acc + item.deal_count_followup, 0)}
+                {filteredData.reduce((acc, item) => acc + item.deal_count_followup, 0)}
               </td>
               <td className="px-6 py-4 whitespace-nowrap font-bold">
                 {formatCurrency(totalFollowupValue)}

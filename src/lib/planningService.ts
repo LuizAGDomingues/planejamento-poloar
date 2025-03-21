@@ -11,10 +11,12 @@ export type PlanningData = {
   deal_ids_close: number[];
   deal_ids_followup: number[];
   user_id: string;
+  created_at: string; // Data de criação do planejamento no Supabase
 };
 
 export type DetailedPlanningsByUser = Record<string, {
   userName: string;
+  created_at: string; // Adicionando a data de criação do planejamento
   deals: {
     deal: Deal;
     type: 'close' | 'followup';
@@ -37,6 +39,7 @@ export function processDetailedPlanningData(
     if (!result[planning.user_id]) {
       result[planning.user_id] = {
         userName: planning.nome,
+        created_at: planning.created_at, // Incluindo a data de criação
         deals: []
       };
     }

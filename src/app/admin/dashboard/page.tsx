@@ -17,6 +17,7 @@ import {
 import { Bar, Pie } from 'react-chartjs-2';
 import TabSelector from '@/components/admin/TabSelector';
 import DetailedPlanningTable from '@/components/admin/DetailedPlanningTable';
+import DashboardTable from '@/components/admin/DashboardTable';
 import { processDetailedPlanningData } from '@/lib/planningService';
 import { Deal } from '@/lib/pipedrive';
 
@@ -200,26 +201,8 @@ export default function AdminDashboardPage() {
 
         {activeTab === 'resumo' && (
           <>
-            {/* Totais */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 mt-6">
-              <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-red-600 mb-2">Fechamento</h3>
-                <p className="text-3xl font-bold">R$ {totalCloseValue.toLocaleString('pt-BR')}</p>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-blue-600 mb-2">Acompanhamento</h3>
-                <p className="text-3xl font-bold">R$ {totalFollowupValue.toLocaleString('pt-BR')}</p>
-              </div>
-              
-              <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-gray-600 mb-2">Total de Parceiros</h3>
-                <p className="text-3xl font-bold">{totalPartnersCount}</p>
-              </div>
-            </div>
-
             {/* Gráficos */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 mt-6">
               <div className="bg-white p-6 rounded-lg shadow">
                 <Bar data={barChartData} options={barOptions} />
               </div>
@@ -229,65 +212,8 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* Tabela de Dados */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vendedor
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Negócios Fechamento
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Valor Fechamento
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Negócios Acompanhamento
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Valor Acompanhamento
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Parceiros
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {plannings.map((planning: PlanningData) => (
-                    <tr key={planning.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{planning.nome}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{planning.deal_count_close}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">R$ {planning.deal_value_close.toLocaleString('pt-BR')}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{planning.deal_count_followup}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">R$ {planning.deal_value_followup.toLocaleString('pt-BR')}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{planning.partners_count}</div>
-                      </td>
-                    </tr>
-                  ))}
-                  
-                  {plannings.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
-                        Nenhum dado disponível
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {/* Tabela com filtros */}
+            <DashboardTable planningData={plannings} />
           </>
         )}
 
