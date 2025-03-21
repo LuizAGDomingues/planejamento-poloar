@@ -148,9 +148,9 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
         exportData.push({
           'Vendedor': formatVendorName(userData.userName),
           'Tipo': item.type === 'close' ? 'Fechamento' : 'Acompanhamento',
-          'ID': item.deal.id,
+          'ID': Number(item.deal.id),
           'Título': item.deal.title || 'Sem título',
-          'Valor': item.deal.value ? Number(item.deal.value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00',
+          'Valor': item.deal.value ? Number(item.deal.value) : 0,
           'Etapa': getStageNameFromId(item.deal.stage_id),
           'Etiquetas': getLabelNamesFromIds(item.deal.label_ids),
           'Planejamento de': formatDate(userData.created_at),
