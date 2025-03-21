@@ -11,6 +11,9 @@ type PlanningData = {
   deal_count_followup: number;
   deal_value_followup: number;
   partners_count: number;
+  deal_ids_close: number[];
+  deal_ids_followup: number[];
+  user_id: string;
 };
 
 export async function GET() {
@@ -39,7 +42,7 @@ export async function GET() {
     }
 
     if (!plannings.length) {
-      return NextResponse.json({ data: [] });
+      return NextResponse.json({ data: [], deals: {}, updated_at: new Date().toISOString() });
     }
 
     // Extrair todos os IDs de deals para buscar em lote
@@ -90,12 +93,16 @@ export async function GET() {
         deal_value_close: calculateTotalValue(closeDeals),
         deal_count_followup: followupDeals.length,
         deal_value_followup: calculateTotalValue(followupDeals),
-        partners_count: planning.partners_count || 0
+        partners_count: planning.partners_count || 0,
+        deal_ids_close: planning.deal_ids_close || [],
+        deal_ids_followup: planning.deal_ids_followup || [],
+        user_id: planning.user_id
       };
     });
 
     return NextResponse.json({ 
       data: dashboardData,
+      deals: dealsMap,
       updated_at: new Date().toISOString()
     });
   } catch (error) {
