@@ -17,18 +17,39 @@ export type Deal = {
 export async function verifyDeals(dealIds: number[]): Promise<Deal[]> {
   if (!dealIds.length) return [];
   
-  const idsParam = dealIds.join(',');
-  const url = `${PIPEDRIVE_BASE_URL}/api/v2/deals?ids=${idsParam}&limit=500&api_token=${PIPEDRIVE_API_TOKEN}`;
+  // Remover duplicatas
+  const uniqueIds = [...new Set(dealIds)];
+  let allDeals: Deal[] = [];
+  
+  // Dividir os IDs em lotes de no máximo 100 (limite da API do Pipedrive)
+  const batchSize = 100;
+  const batches = [];
+  
+  for (let i = 0; i < uniqueIds.length; i += batchSize) {
+    batches.push(uniqueIds.slice(i, i + batchSize));
+  }
   
   try {
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error('Falha ao verificar negócios no Pipedrive');
+    // Processar cada lote sequencialmente
+    for (const batch of batches) {
+      const idsParam = batch.join(',');
+      const url = `${PIPEDRIVE_BASE_URL}/api/v2/deals?ids=${idsParam}&limit=500&api_token=${PIPEDRIVE_API_TOKEN}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (!data.success) {
+        console.error('Falha ao verificar lote de negócios no Pipedrive:', data);
+        continue; // Continuar para o próximo lote mesmo se houver falha
+      }
+      
+      // Adicionar os deals deste lote ao resultado
+      if (data.data && Array.isArray(data.data)) {
+        allDeals = [...allDeals, ...data.data];
+      }
     }
     
-    return data.data;
+    return allDeals;
   } catch (error) {
     console.error('Erro ao verificar negócios:', error);
     throw error;

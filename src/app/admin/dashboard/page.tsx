@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { getUserRole } from '@/lib/cookies';
@@ -42,6 +42,7 @@ type PlanningData = {
   deal_ids_close: number[];
   deal_ids_followup: number[];
   user_id: string;
+  created_at: string;
 };
 
 type Tab = {
@@ -54,7 +55,15 @@ const tabs: Tab[] = [
   { id: 'detalhado', label: 'Detalhado' }
 ];
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
+// Função para formatar data no formato YYYY-MM-DD
+const formatDateForApi = (date: Date): string => {
+  return date.toISOString().split('T')[0];
+};
+
+// Função para obter data de hoje formatada
+const getTodayFormatted = (): string => {
+  return formatDateForApi(new Date());
+};
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -62,6 +71,16 @@ export default function AdminDashboardPage() {
   const [totalFollowupValue, setTotalFollowupValue] = useState(0);
   const [totalPartnersCount, setTotalPartnersCount] = useState(0);
   const [activeTab, setActiveTab] = useState('resumo');
+  const [dateRange, setDateRange] = useState({
+    startDate: getTodayFormatted(),
+    endDate: getTodayFormatted()
+  });
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // URL da API com filtro de data (apenas para o dia atual no carregamento inicial)
+  const getApiUrl = useCallback(() => {
+    return `/api/admin/plannings?start_date=${dateRange.startDate}&end_date=${dateRange.endDate}`;
+  }, [dateRange.startDate, dateRange.endDate]);
 
   // Verificar se usuário tem permissão para acessar o dashboard
   useEffect(() => {
@@ -73,10 +92,33 @@ export default function AdminDashboardPage() {
   }, [router]);
 
   // Buscar dados do dashboard com SWR para cache
-  const { data, error, isLoading } = useSWR('/api/admin/plannings', fetcher, {
+  const { data, error, isLoading, mutate } = useSWR(getApiUrl(), async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Erro ao buscar dados');
+    }
+    return response.json();
+  }, {
     refreshInterval: 300000, // Atualizar a cada 5 minutos
     revalidateOnFocus: false,
   });
+
+  // Função para atualizar o filtro de data
+  const handleDateRangeChange = async (startDate: string, endDate: string) => {
+    setDateRange({ startDate, endDate });
+    setIsInitialLoad(false);
+    // A revalidação acontecerá automaticamente quando a URL de SWR mudar
+  };
+
+  // Quando a data mudou na tabela de resumo
+  const handleDashboardDateChange = useCallback((startDate: string, endDate: string) => {
+    handleDateRangeChange(startDate, endDate);
+  }, []);
+
+  // Quando a data mudou na tabela detalhada
+  const handleDetailedDateChange = useCallback((startDate: string, endDate: string) => {
+    handleDateRangeChange(startDate, endDate);
+  }, []);
 
   // Calcular totais para gráficos quando os dados forem carregados
   useEffect(() => {
@@ -213,13 +255,23 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Tabela com filtros */}
-            <DashboardTable planningData={plannings} />
+            <DashboardTable 
+              planningData={plannings} 
+              initialDateStart={dateRange.startDate}
+              initialDateEnd={dateRange.endDate}
+              onDateChange={handleDashboardDateChange}
+            />
           </>
         )}
 
         {activeTab === 'detalhado' && (
           <div className="mt-6">
-            <DetailedPlanningTable plannings={detailedPlanningsByUser} />
+            <DetailedPlanningTable 
+              plannings={detailedPlanningsByUser}
+              initialDateStart={dateRange.startDate}
+              initialDateEnd={dateRange.endDate}
+              onDateChange={handleDetailedDateChange}
+            />
           </div>
         )}
       </div>

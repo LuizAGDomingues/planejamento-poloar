@@ -16,20 +16,40 @@ type PlanningData = {
 
 interface DashboardTableProps {
   planningData: PlanningData[];
+  initialDateStart?: string;
+  initialDateEnd?: string;
+  onDateChange?: (startDate: string, endDate: string) => void;
 }
 
-export default function DashboardTable({ planningData }: DashboardTableProps) {
+export default function DashboardTable({ 
+  planningData, 
+  initialDateStart, 
+  initialDateEnd,
+  onDateChange 
+}: DashboardTableProps) {
   const [dateStart, setDateStart] = useState<string>('');
   const [dateEnd, setDateEnd] = useState<string>('');
   const [userFilter, setUserFilter] = useState<string>('all');
 
-  // Inicializar datas ao carregar o componente - data atual como padrão
+  // Inicializar datas ao carregar o componente - usar valores iniciais ou data atual como padrão
   useEffect(() => {
-    const today = new Date();
-    const formattedToday = today.toISOString().split('T')[0];
-    setDateStart(formattedToday);
-    setDateEnd(formattedToday);
-  }, []);
+    if (initialDateStart && initialDateEnd) {
+      setDateStart(initialDateStart);
+      setDateEnd(initialDateEnd);
+    } else {
+      const today = new Date();
+      const formattedToday = today.toISOString().split('T')[0];
+      setDateStart(formattedToday);
+      setDateEnd(formattedToday);
+    }
+  }, [initialDateStart, initialDateEnd]);
+
+  // Notificar quando as datas mudam
+  useEffect(() => {
+    if (dateStart && dateEnd && onDateChange) {
+      onDateChange(dateStart, dateEnd);
+    }
+  }, [dateStart, dateEnd, onDateChange]);
 
   // Lista única de usuários para o filtro
   const userOptions = useMemo(() => {
@@ -89,6 +109,14 @@ export default function DashboardTable({ planningData }: DashboardTableProps) {
     }).format(value);
   };
 
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDateStart(e.target.value);
+  };
+
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDateEnd(e.target.value);
+  };
+
   return (
     <div>
       {/* Filtros */}
@@ -106,7 +134,7 @@ export default function DashboardTable({ planningData }: DashboardTableProps) {
               type="date"
               className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={dateStart}
-              onChange={(e) => setDateStart(e.target.value)}
+              onChange={handleStartDateChange}
             />
           </div>
           
@@ -120,7 +148,7 @@ export default function DashboardTable({ planningData }: DashboardTableProps) {
               type="date"
               className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               value={dateEnd}
-              onChange={(e) => setDateEnd(e.target.value)}
+              onChange={handleEndDateChange}
             />
           </div>
           

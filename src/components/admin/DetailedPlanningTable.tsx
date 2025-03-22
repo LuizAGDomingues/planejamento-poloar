@@ -14,9 +14,17 @@ import { saveAs } from 'file-saver';
 
 type DetailedPlanningProps = {
   plannings: DetailedPlanningsByUser;
+  initialDateStart?: string;
+  initialDateEnd?: string;
+  onDateChange?: (startDate: string, endDate: string) => void;
 };
 
-export default function DetailedPlanningTable({ plannings }: DetailedPlanningProps) {
+export default function DetailedPlanningTable({ 
+  plannings,
+  initialDateStart,
+  initialDateEnd,
+  onDateChange
+}: DetailedPlanningProps) {
   // Estados para filtros
   const [userFilter, setUserFilter] = useState<string>('all');
   const [stageFilter, setStageFilter] = useState<number | 'all'>('all');
@@ -26,13 +34,25 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
   const [dateStart, setDateStart] = useState<string>('');
   const [dateEnd, setDateEnd] = useState<string>('');
 
-  // Inicializar datas ao carregar o componente - data atual como padrão
+  // Inicializar datas ao carregar o componente - usar valores iniciais ou data atual como padrão
   useEffect(() => {
-    const today = new Date();
-    const formattedToday = today.toISOString().split('T')[0];
-    setDateStart(formattedToday);
-    setDateEnd(formattedToday);
-  }, []);
+    if (initialDateStart && initialDateEnd) {
+      setDateStart(initialDateStart);
+      setDateEnd(initialDateEnd);
+    } else {
+      const today = new Date();
+      const formattedToday = today.toISOString().split('T')[0];
+      setDateStart(formattedToday);
+      setDateEnd(formattedToday);
+    }
+  }, [initialDateStart, initialDateEnd]);
+
+  // Notificar quando as datas mudam
+  useEffect(() => {
+    if (dateStart && dateEnd && onDateChange) {
+      onDateChange(dateStart, dateEnd);
+    }
+  }, [dateStart, dateEnd, onDateChange]);
 
   // Lista de usuários para o filtro
   const userOptions = useMemo(() => {
@@ -137,34 +157,8 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
     });
   };
 
-  // Preparar dados para exportação em formato tabular
-  const prepareExportData = () => {
-    const exportData: any[] = [];
-    
-    Object.entries(filteredData).forEach(([userId, userData]) => {
-      const filteredDeals = getFilteredDeals(userData.deals);
-      
-      filteredDeals.forEach(item => {
-        exportData.push({
-          'Vendedor': formatVendorName(userData.userName),
-          'Tipo': item.type === 'close' ? 'Fechamento' : 'Acompanhamento',
-          'ID': Number(item.deal.id),
-          'Título': item.deal.title || 'Sem título',
-          'Valor': item.deal.value ? Number(item.deal.value) : 0,
-          'Etapa': getStageNameFromId(item.deal.stage_id),
-          'Etiquetas': getLabelNamesFromIds(item.deal.label_ids),
-          'Planejamento de': formatDate(userData.created_at),
-          'Update': item.deal.update_time ? formatDate(item.deal.update_time) : 'N/A',
-          'Resultado': getResultadoText(item.deal),
-        });
-      });
-    });
-    
-    return exportData;
-  };
-
   // Obter texto do resultado sem componentes React
-  const getResultadoText = (deal: Deal): string => {
+  const getResultadoText = (deal: Deal, created_at: string): string => {
     const labelIds = deal.label_ids || [];
     
     if (labelIds.includes(22)) {
@@ -183,20 +177,42 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
       return getPipedriveLabelName(recognizedLabels[0] as PipedriveLabel) || 'Desconhecida';
     }
     
-    const isUpdatedToday = () => {
-      if (!deal.update_time) return false;
-      
-      const updateDate = new Date(deal.update_time);
-      const today = new Date();
-      
-      return (
-        updateDate.getDate() === today.getDate() &&
-        updateDate.getMonth() === today.getMonth() &&
-        updateDate.getFullYear() === today.getFullYear()
-      );
-    };
+    // Se não tiver etiquetas reconhecidas, verificar se foi atualizado após a criação do planejamento
+    if (!deal.update_time || !created_at) return 'NÃO FEITO';
     
-    return isUpdatedToday() ? 'FEITO' : 'NÃO FEITO';
+    const updateDate = new Date(deal.update_time);
+    const creationDate = new Date(created_at);
+    
+    // Se o update_time for igual ou posterior à data de criação, é FEITO
+    return updateDate >= creationDate ? 'FEITO' : 'NÃO FEITO';
+  };
+
+  // Preparar dados para exportação em formato tabular
+  const prepareExportData = () => {
+    const exportData: any[] = [];
+    
+    Object.entries(filteredData).forEach(([userId, userData]) => {
+      const filteredDeals = getFilteredDeals(userData.deals);
+      
+      filteredDeals.forEach(item => {
+        exportData.push({
+          'Vendedor': formatVendorName(userData.userName),
+          'Tipo': item.type === 'close' ? 'Fechamento' : 'Acompanhamento',
+          // Exportar ID como número em vez de texto
+          'ID': Number(item.deal.id),
+          'Título': item.deal.title || 'Sem título',
+          // Exportar valor como número, sem formatação de moeda
+          'Valor': item.deal.value ? Number(item.deal.value) : 0,
+          'Etapa': getStageNameFromId(item.deal.stage_id),
+          'Etiquetas': getLabelNamesFromIds(item.deal.label_ids),
+          'Planejamento de': formatDate(userData.created_at),
+          'Update': item.deal.update_time ? formatDate(item.deal.update_time) : 'N/A',
+          'Resultado': getResultadoText(item.deal, userData.created_at),
+        });
+      });
+    });
+    
+    return exportData;
   };
 
   // Exportar para Excel
@@ -255,7 +271,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
   };
 
   // Analisar o resultado com base nas regras
-  const getResultado = (deal: Deal) => {
+  const getResultado = (deal: Deal, created_at: string) => {
     const labelIds = deal.label_ids || [];
     
     // Verificar se possui label 22 (CANCELADO)
@@ -290,21 +306,20 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
       );
     }
     
-    // Se não tiver etiquetas reconhecidas, verificar update_time
-    const isUpdatedToday = () => {
-      if (!deal.update_time) return false;
-      
-      const updateDate = new Date(deal.update_time);
-      const today = new Date();
-      
+    // Se não tiver etiquetas reconhecidas, verificar se foi atualizado após a criação do planejamento
+    if (!deal.update_time || !created_at) {
       return (
-        updateDate.getDate() === today.getDate() &&
-        updateDate.getMonth() === today.getMonth() &&
-        updateDate.getFullYear() === today.getFullYear()
+        <span className="inline-flex px-1.5 py-0.5 text-xxs font-medium rounded-full bg-gray-100 text-gray-800">
+          NÃO FEITO
+        </span>
       );
-    };
+    }
     
-    if (isUpdatedToday()) {
+    const updateDate = new Date(deal.update_time);
+    const creationDate = new Date(created_at);
+    
+    // Se o update_time for igual ou posterior à data de criação, é FEITO
+    if (updateDate >= creationDate) {
       return (
         <span className="inline-flex px-1.5 py-0.5 text-xxs font-medium rounded-full bg-indigo-100 text-indigo-800">
           FEITO
@@ -330,6 +345,14 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR');
+  };
+
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDateStart(e.target.value);
+  };
+
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDateEnd(e.target.value);
   };
 
   return (
@@ -360,7 +383,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
                 type="date"
                 className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 value={dateStart}
-                onChange={(e) => setDateStart(e.target.value)}
+                onChange={handleStartDateChange}
               />
             </div>
             <div>
@@ -372,7 +395,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
                 type="date"
                 className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 value={dateEnd}
-                onChange={(e) => setDateEnd(e.target.value)}
+                onChange={handleEndDateChange}
               />
             </div>
           </div>
@@ -518,7 +541,7 @@ export default function DetailedPlanningTable({ plannings }: DetailedPlanningPro
                         {formatDate(userData.created_at)}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs">
-                        {getResultado(item.deal)}
+                        {getResultado(item.deal, userData.created_at)}
                       </td>
                     </tr>
                   ))

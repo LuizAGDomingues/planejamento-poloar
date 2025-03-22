@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import supabase from '@/lib/supabase';
 import { verifyDeals, calculateTotalValue } from '@/lib/pipedrive';
 import { Deal } from '@/lib/pipedrive';
@@ -17,10 +18,15 @@ type PlanningData = {
   created_at: string;
 };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    // Buscando todos os planejamentos com dados do usuário
-    const { data: plannings, error } = await supabase
+    // Obter parâmetros de filtro de data da URL
+    const searchParams = request.nextUrl.searchParams;
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+    
+    // Consulta base para buscar planejamentos
+    let query = supabase
       .from('plannings')
       .select(`
         id,
@@ -34,6 +40,15 @@ export async function GET() {
           nome
         )
       `);
+    
+    // Aplicar filtro de data se fornecido
+    if (startDate && endDate) {
+      // Formato ISO: YYYY-MM-DD
+      query = query.gte('created_at', `${startDate}T00:00:00.000Z`)
+                  .lte('created_at', `${endDate}T23:59:59.999Z`);
+    }
+    
+    const { data: plannings, error } = await query;
 
     if (error) {
       console.error('Erro ao buscar planejamentos:', error);
@@ -43,7 +58,7 @@ export async function GET() {
       );
     }
 
-    if (!plannings.length) {
+    if (!plannings || !plannings.length) {
       return NextResponse.json({ data: [], deals: {}, updated_at: new Date().toISOString() });
     }
 
