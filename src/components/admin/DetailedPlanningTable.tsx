@@ -180,11 +180,16 @@ export default function DetailedPlanningTable({
     // Se não tiver etiquetas reconhecidas, verificar se foi atualizado após a criação do planejamento
     if (!deal.update_time || !created_at) return 'NÃO FEITO';
     
+    // Ignorar o horário e considerar apenas a data (dia, mês e ano)
     const updateDate = new Date(deal.update_time);
     const creationDate = new Date(created_at);
     
-    // Se o update_time for igual ou posterior à data de criação, é FEITO
-    return updateDate >= creationDate ? 'FEITO' : 'NÃO FEITO';
+    // Formatar para YYYY-MM-DD para comparar apenas as datas
+    const updateDateStr = updateDate.toISOString().split('T')[0];
+    const creationDateStr = creationDate.toISOString().split('T')[0];
+    
+    // Se as datas forem iguais ou se a data de atualização for posterior, é FEITO
+    return updateDateStr >= creationDateStr ? 'FEITO' : 'NÃO FEITO';
   };
 
   // Preparar dados para exportação em formato tabular
@@ -315,11 +320,16 @@ export default function DetailedPlanningTable({
       );
     }
     
+    // Ignorar o horário e considerar apenas a data (dia, mês e ano)
     const updateDate = new Date(deal.update_time);
     const creationDate = new Date(created_at);
     
-    // Se o update_time for igual ou posterior à data de criação, é FEITO
-    if (updateDate >= creationDate) {
+    // Formatar para YYYY-MM-DD para comparar apenas as datas
+    const updateDateStr = updateDate.toISOString().split('T')[0];
+    const creationDateStr = creationDate.toISOString().split('T')[0];
+    
+    // Se as datas forem iguais ou se a data de atualização for posterior, é FEITO
+    if (updateDateStr >= creationDateStr) {
       return (
         <span className="inline-flex px-1.5 py-0.5 text-xxs font-medium rounded-full bg-indigo-100 text-indigo-800">
           FEITO
